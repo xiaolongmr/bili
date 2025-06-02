@@ -1,43 +1,49 @@
-// api/bili.js
+// File: api/bili.js
 
-let cachedData = null;
-let lastFetchTime = 0;
-const CACHE_TTL = 10 * 60 * 1000; // 缓存 10 分钟
+import fetch from 'node-fetch';
+import fs from 'fs/promises';
+import path from 'path';
+
+const CACHE_DIR = '/tmp/bili_cache';
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 export default async function handler(req, res) {
-    const now = Date.now();
-    const apiUrl = 'https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=1';
+    const { mid } = req.query;
+    if (!mid) return res.status(400).json({ error: 'Missing mid parameter' });
 
     try {
-        const apiRes = await fetch(apiUrl);
-        const json = await apiRes.json();
+        await fs.mkdir(CACHE_DIR, { recursive: true });
+        const cacheFile = path.join(CACHE_DIR, `${mid}.json`);
 
-        if (json.code === 0) {
-            // 正常响应，更新缓存
-            cachedData = json;
-            lastFetchTime = now;
+        // Check cache
+        let cached = null;
+        try {
+            const stats = await fs.stat(cacheFile);
+            const age = Date.now() - stats.mtimeMs;
+            if (age < CACHE_TTL) {
+                cached = JSON.parse(await fs.readFile(cacheFile, 'utf-8'));
+            }
+        } catch (_) { }
 
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            return res.status(200).json(json);
+        // Fetch from Bilibili
+        const biliRes = await fetch(
+            `https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=${mid}`
+        );
+        const biliJson = await biliRes.json();
+
+        if (biliJson.code === 0) {
+            await fs.writeFile(cacheFile, JSON.stringify(biliJson), 'utf-8');
+            return res.setHeader('Access-Control-Allow-Origin', '*').status(200).json(biliJson);
         }
 
-        // 出现 -352 错误，尝试从缓存返回
-        if (json.code === -352 && cachedData && now - lastFetchTime < CACHE_TTL) {
-            console.warn("Bilibili 返回 -352，使用缓存");
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            return res.status(200).json(cachedData);
+        // Fallback to cache
+        if (cached) {
+            return res.setHeader('Access-Control-Allow-Origin', '*').status(200).json(cached);
         }
 
-        // 其他错误
-        return res.status(500).json({ error: 'Bilibili API 错误', code: json.code });
-    } catch (e) {
-        // 网络请求失败，尝试从缓存返回
-        if (cachedData && now - lastFetchTime < CACHE_TTL) {
-            console.warn("网络错误，使用缓存");
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            return res.status(200).json(cachedData);
-        }
-
-        return res.status(500).json({ error: '请求失败', detail: e.message });
+        return res.status(502).json({ error: 'Bilibili fetch failed', code: biliJson.code });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error' });
     }
 }
