@@ -1,0 +1,43 @@
+<!-- index.html -->
+<div id="bili-container"></div>
+
+<script>
+    async function fetchBili() {
+        const res = await fetch('/api/bili');
+        const json = await res.json();
+        const items = json.data.items;
+
+        const container = document.getElementById('bili-container');
+
+        for (const item of items) {
+            const article = item.modules?.module_dynamic?.major?.article;
+            const stat = item.modules?.module_stat;
+            if (!article) continue;
+
+            const title = article.title;
+            const desc = article.desc;
+            const covers = article.covers;
+            const jump = article.jump_url.startsWith('//') ? 'https:' + article.jump_url : article.jump_url;
+            const like = stat?.like?.count || 0;
+            const comment = stat?.comment?.count || 0;
+            const forward = stat?.forward?.count || 0;
+
+            const coverHTML = covers.map(url =>
+                `<img src="/api/proxy-image?url=${encodeURIComponent(url)}" style="max-width: 300px; border-radius: 8px; margin: 0.5em 0;">`
+            ).join('');
+
+            container.innerHTML += `
+      <div style="margin-bottom:2em;padding:1em;border:1px solid #eee;border-radius:12px;">
+        <h3><a href="${jump}" target="_blank">${title}</a></h3>
+        <p>${desc}</p>
+        ${coverHTML}
+        <div style="color: #888; margin-top: 0.5em;">
+          ❤️ ${like} &nbsp; 💬 ${comment} &nbsp; 🔁 ${forward}
+        </div>
+      </div>
+    `;
+        }
+    }
+
+    fetchBili();
+</script>
