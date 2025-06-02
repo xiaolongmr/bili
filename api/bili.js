@@ -6,7 +6,7 @@ const CACHE_TTL = 10 * 60 * 1000; // 缓存 10 分钟
 
 export default async function handler(req, res) {
     const now = Date.now();
-    const apiUrl = 'https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=1716314498';
+    const apiUrl = 'https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=1';
 
     try {
         const apiRes = await fetch(apiUrl);
